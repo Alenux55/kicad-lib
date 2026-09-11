@@ -7,7 +7,7 @@
 		(at 0 -1.5 0)
 		(unlocked yes)
 		(layer "F.SilkS")
-		(uuid "d75520b0-1bc2-41e4-9b64-bdec68698a56")
+		(uuid "1929ae05-3377-4f20-bb75-54b892af4b86")
 		(effects
 			(font
 				(size 1 1)
@@ -20,7 +20,7 @@
 		(unlocked yes)
 		(layer "F.Fab")
 		(hide yes)
-		(uuid "d5b14540-0cc1-4ba0-a2e1-ed2ad6d5450b")
+		(uuid "eb38d61d-b485-48fd-9eb3-ebb7e09b0110")
 		(effects
 			(font
 				(size 1 1)
@@ -33,7 +33,7 @@
 		(unlocked yes)
 		(layer "F.Fab")
 		(hide yes)
-		(uuid "2858d21a-2a40-4b3a-8775-e50c43f4a335")
+		(uuid "fd424442-0657-4d60-b8e1-a5ab92ff6529")
 		(effects
 			(font
 				(size 1 1)
@@ -46,7 +46,7 @@
 		(unlocked yes)
 		(layer "F.Fab")
 		(hide yes)
-		(uuid "6c31f020-027d-4330-840e-e53af9640fb8")
+		(uuid "18f7744a-ee4e-4407-88be-ff22458f34fb")
 		(effects
 			(font
 				(size 1 1)
@@ -64,7 +64,7 @@
 			(type default)
 		)
 		(layer "F.CrtYd")
-		(uuid "351c7e3a-cace-4155-9c72-eebc1ac28029")
+		(uuid "36812dda-cc30-4760-b398-8d76410c6451")
 	)
 	(fp_line
 		(start -1 1)
@@ -74,7 +74,7 @@
 			(type default)
 		)
 		(layer "F.CrtYd")
-		(uuid "a23a155b-fe33-4381-957a-48ac4da0caba")
+		(uuid "92eebec8-51cf-4b70-aeca-6f43043853ea")
 	)
 	(fp_line
 		(start 1 -1)
@@ -84,7 +84,7 @@
 			(type default)
 		)
 		(layer "F.CrtYd")
-		(uuid "0e63e559-5110-462c-a41b-f819d90a0428")
+		(uuid "bb43ebc8-a41f-4d8f-89c4-a037093617fb")
 	)
 	(fp_line
 		(start 1 1)
@@ -94,7 +94,7 @@
 			(type default)
 		)
 		(layer "F.CrtYd")
-		(uuid "5eaa275c-f260-4a92-b21d-0422c015d738")
+		(uuid "e2848e50-2a29-4018-a90c-e9efc01893d7")
 	)
 	(fp_arc
 		(start 0 0.5)
@@ -105,13 +105,13 @@
 			(type default)
 		)
 		(layer "F.Fab")
-		(uuid "26b4bce8-c0be-41a2-92f6-351b6f98da6b")
+		(uuid "52ebc901-a31f-4d2a-809a-8d145cadc020")
 	)
 	(fp_text user "${REFERENCE}"
 		(at 0 0 0)
 		(unlocked yes)
 		(layer "F.Fab")
-		(uuid "47e49be6-6c35-480e-804e-e982ee5cc9ef")
+		(uuid "3fdf5287-f0c9-48fd-9a1d-0b752bfc8c2c")
 		(effects
 			(font
 				(size 1 1)
@@ -124,19 +124,7 @@
 		(size 1 1)
 		(layers "F.Cu" "F.Mask")
 		(thermal_bridge_angle 90)
-		(uuid "2975336b-d022-42d5-aad8-1c7f090aa1b1")
+		(uuid "13a6c715-25f5-4477-afd6-669aac41d3d1")
 	)
 	(embedded_fonts no)
-	(model "E:/Documents/GitHub/kicad-lib/3d_models/ZX80-B-5S.stp"
-		(opacity 0.5800)
-		(offset
-			(xyz 0 0 5.5)
-		)
-		(scale
-			(xyz 1 1 1)
-		)
-		(rotate
-			(xyz 90 -0 -0)
-		)
-	)
 )
