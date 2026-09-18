@@ -1,0 +1,14 @@
+R_0402:
+    code_imperial: "0402"
+    code_metric: "1005"
+    body_length:
+      minimum: 0.95
+      maximum: 1.05
+    body_width:
+      minimum: 0.45
+      maximum: 0.55
+    terminal_length:
+        minimum: 0.15
+        maximum: 0.35
+    size_info: '(Body size source: IPC-SM-782 page 72, https://www.pcb-3d.com/wordpress/wp-content/uploads/ipc-sm-782a_amendment_1_and_2.pdf)'
+    ipc_reference: "ipc_spec_smaller_0603"
