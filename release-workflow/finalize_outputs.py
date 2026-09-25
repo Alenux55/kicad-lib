@@ -262,9 +262,13 @@ def prepare_fabrication_worksheet(project_root: Path) -> None:
     if not source.is_file():
         raise FileNotFoundError(f"Canonical PCB worksheet missing: {source}. "
                                 "Set KICAD_LIB_ROOT to the shared kicad-lib checkout.")
+    content = source.read_bytes()
+    if any(token not in content for token in (b"${#}", b"${##}")):
+        raise ValueError(f"Canonical fabrication worksheet must contain page tokens: {source}")
+    content = content.replace(b"${##}", b"1").replace(b"${#}", b"1")
     work = root / "_work"
     work.mkdir(exist_ok=True)
-    write_temporary_worksheet(work / "fabrication.kicad_wks", source.read_bytes())
+    write_temporary_worksheet(work / "fabrication.kicad_wks", content)
     print(f"Prepared fabrication worksheet from {source.resolve()}")
 
 

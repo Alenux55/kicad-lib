@@ -222,13 +222,13 @@ class FormattingTests(unittest.TestCase):
                              b'(tbtext "SCH 1/1 No Variant")')
             self.assertFalse((output / "_work/assembly-bottom.kicad_wks").exists())
 
-    def test_fabrication_worksheet_is_temporary_exact_copy(self):
+    def test_fabrication_worksheet_replaces_page_tokens(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             sheets = root / "library/drawing-sheets"
             sheets.mkdir(parents=True)
             source = sheets / "alex-generic-pcb.kicad_wks"
-            original = b'\xef\xbb\xbf(kicad_wks (tbtext "${ProjectTitle}"))\r\n'
+            original = b'\xef\xbb\xbf(kicad_wks (tbtext "Page: ${#}/${##} ${ProjectTitle}"))\r\n'
             source.write_bytes(original)
             project = root / "project"
             project.mkdir()
@@ -237,7 +237,8 @@ class FormattingTests(unittest.TestCase):
             with patch.dict(os.environ, KICAD_LIB_ROOT=str(root / "library"),
                             JOBSET_OUTPUT_WORK_PATH=str(output)):
                 formatter.prepare_fabrication_worksheet(project)
-            self.assertEqual((output / "_work/fabrication.kicad_wks").read_bytes(), original)
+            expected = original.replace(b"${##}", b"1").replace(b"${#}", b"1")
+            self.assertEqual((output / "_work/fabrication.kicad_wks").read_bytes(), expected)
             self.assertEqual(source.read_bytes(), original)
 
     def test_missing_canonical_worksheet_fails(self):
