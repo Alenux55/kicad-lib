@@ -10,7 +10,7 @@ Set `KICAD_LIB_ROOT` to the absolute path of this repository and ensure a Python
 shell-neutral Python launcher:
 
 ```text
-python -c "import os,runpy; from pathlib import Path; runpy.run_path(str(Path(os.environ['KICAD_LIB_ROOT']) / 'release-workflow' / 'finalize_outputs.py'),run_name='__main__')" --project-root "${KIPRJMOD}" --kind <kind>
+python -c "import os,runpy; from pathlib import Path; runpy.run_path(str(Path(os.environ['KICAD_LIB_ROOT']) / 'release-workflow' / 'run_finalize.py'),run_name='__main__')" --project-root "${KIPRJMOD}" --kind <kind>
 ```
 
 The launcher reads `KICAD_LIB_ROOT` through Python's environment API and joins
@@ -20,6 +20,13 @@ Linux and macOS path conventions without `%VAR%` or `$VAR` shell expansion.
 adding or changing the environment variable. On systems that expose Python only
 as `python3`, provide a `python` alias/symlink or activate a virtual environment
 before running KiCad/Prism.
+
+`run_finalize.py` uses only the standard library. On Windows it starts
+`py -3.14 finalize_outputs.py` with the original arguments, keeping third-party
+packages out of KiCad's bundled Python 3.11. On Linux and macOS it starts
+`finalize_outputs.py` with `sys.executable`, so Prism keeps using its existing
+worker interpreter. The launcher's process exit status is the finalizer's exit
+status.
 
 `kind` is `prepare-fabrication`, `prepare-assembly`, `assembly`, or `fabrication`. The explicit project
 root identifies the calling `.kicad_pro` and `Outputs.kicad_jobset`; KiCad

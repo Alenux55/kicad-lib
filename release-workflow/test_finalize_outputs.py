@@ -14,9 +14,32 @@ import openpyxl
 from pypdf import PdfReader, PdfWriter
 
 import finalize_outputs as formatter
+import run_finalize as launcher
 
 
 class FormattingTests(unittest.TestCase):
+    def test_launcher_selects_interpreter_and_preserves_arguments(self):
+        args = ["--project-root", "/project with spaces", "--kind", "prepare-assembly"]
+        windows = launcher.command(args, "nt", r"C:\Program Files\KiCad\10.0\bin\python.exe")
+        linux = launcher.command(args, "posix", "/app/venv/bin/python")
+        self.assertEqual(windows[:2], ["py", "-3.14"])
+        self.assertEqual(linux[0], "/app/venv/bin/python")
+        self.assertEqual(windows[-len(args):], args)
+        self.assertEqual(linux[-len(args):], args)
+        self.assertEqual(Path(windows[2]).name, "finalize_outputs.py")
+        self.assertEqual(Path(linux[1]).name, "finalize_outputs.py")
+
+    def test_launcher_propagates_child_exit_code(self):
+        with (patch.object(launcher.subprocess, "run") as run,
+              patch.object(launcher.sys, "argv", ["run_finalize.py", "--kind", "assembly"])):
+            run.return_value.returncode = 17
+            self.assertEqual(launcher.main(), 17)
+            run.assert_called_once_with(
+                launcher.command(["--kind", "assembly"], launcher.os.name,
+                                 launcher.sys.executable),
+                check=False,
+            )
+
     @staticmethod
     def _u3d_material(name, diffuse):
         encoded = name.encode()
