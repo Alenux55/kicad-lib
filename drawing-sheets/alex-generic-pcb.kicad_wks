@@ -13,7 +13,7 @@
 	)
 	(rect
 		(name "")
-		(start 109.989 18.5022)
+		(start 109.989 15.5022)
 		(end 1.989 2.0022)
 		(comment "rect around the title block")
 	)
@@ -131,17 +131,13 @@
 	)
 	(tbtext "Title: ${ProjectTitle}"
 		(name "")
-		(pos 109 16.2)
+		(pos 109 13.2002)
 		(font
 			(size 2 2) bold italic)
 	)
 	(tbtext "File: ${FILENAME}"
 		(name "")
 		(pos 109 9.5)
-	)
-	(tbtext "Sheet Title: ${TITLE}"
-		(name "")
-		(pos 109 12.5)
 	)
 	(line
 		(name "")
@@ -152,10 +148,5 @@
 		(name "")
 		(start 25.989 8.0022)
 		(end 26 2.0002)
-	)
-	(line
-		(name "")
-		(start 109.989 14.0022)
-		(end 1.989 14.0022)
 	)
 )
