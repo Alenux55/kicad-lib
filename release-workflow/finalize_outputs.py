@@ -164,6 +164,105 @@ def recolor_u3d_pads(data: bytes) -> bytes:
     return bytes(result)
 
 
+_STEP_ENTITY = re.compile(r"(?ms)^(#\d+)\s*=\s*(.*?);(?=\r?$)")
+_STEP_REFERENCE = re.compile(r"#\d+")
+_STEP_COLOUR = re.compile(
+    r"^COLOUR_RGB\(('[^']*'),\s*([^,]+),\s*([^,]+),\s*([^\)]+)\)$", re.S)
+
+
+def _step_entities(data: str) -> dict[str, str]:
+    entities = {match.group(1): match.group(2) for match in _STEP_ENTITY.finditer(data)}
+    if not entities:
+        raise ValueError("STEP file contains no entities")
+    return entities
+
+
+def _step_unique_referrer(entities: dict[str, str], entity_type: str, target: str) -> str:
+    matches = [identifier for identifier, body in entities.items()
+               if body.startswith(entity_type + "(") and target in _STEP_REFERENCE.findall(body)]
+    if len(matches) != 1:
+        raise ValueError(f"Expected one STEP {entity_type} referencing {target}, got {len(matches)}")
+    return matches[0]
+
+
+def _step_product_colour(entities: dict[str, str], suffix: str) -> str:
+    products = []
+    for identifier, body in entities.items():
+        match = re.match(r"^PRODUCT\('([^']*)'", body)
+        if match and match.group(1).endswith(suffix):
+            products.append(identifier)
+    if len(products) != 1:
+        raise ValueError(f"Expected one STEP product ending {suffix!r}, got {len(products)}")
+
+    formation = _step_unique_referrer(entities, "PRODUCT_DEFINITION_FORMATION", products[0])
+    definition = _step_unique_referrer(entities, "PRODUCT_DEFINITION", formation)
+    definition_shape = _step_unique_referrer(entities, "PRODUCT_DEFINITION_SHAPE", definition)
+    shape_link = _step_unique_referrer(entities, "SHAPE_DEFINITION_REPRESENTATION", definition_shape)
+    link_refs = _STEP_REFERENCE.findall(entities[shape_link])
+    if len(link_refs) != 2:
+        raise ValueError(f"Unexpected STEP shape link for product ending {suffix!r}")
+    representation = link_refs[1]
+    representation_refs = _STEP_REFERENCE.findall(entities[representation])
+    if not representation_refs:
+        raise ValueError(f"STEP representation has no context for product ending {suffix!r}")
+    context = representation_refs[-1]
+
+    presentations = [identifier for identifier, body in entities.items()
+                     if body.startswith("MECHANICAL_DESIGN_GEOMETRIC_PRESENTATION_REPRESENTATION(")
+                     and _STEP_REFERENCE.findall(body)[-1:] == [context]]
+    if len(presentations) != 1:
+        raise ValueError(f"Expected one STEP presentation for product ending {suffix!r}")
+
+    colours: set[str] = set()
+    for styled in _STEP_REFERENCE.findall(entities[presentations[0]])[:-1]:
+        styled_refs = _STEP_REFERENCE.findall(entities.get(styled, ""))
+        if not styled_refs:
+            raise ValueError(f"Malformed STEP style for product ending {suffix!r}")
+        pending = [styled_refs[0]]  # Ignore the styled geometry reference.
+        visited: set[str] = set()
+        while pending:
+            identifier = pending.pop()
+            if identifier in visited:
+                continue
+            visited.add(identifier)
+            body = entities.get(identifier, "")
+            if body.startswith("COLOUR_RGB("):
+                colours.add(identifier)
+            else:
+                pending.extend(_STEP_REFERENCE.findall(body))
+    if len(colours) != 1:
+        raise ValueError(f"Expected one STEP colour for product ending {suffix!r}, got {len(colours)}")
+    return next(iter(colours))
+
+
+def recolor_step_pads(data: str) -> str:
+    """Give KiCad's named pad STEP product the same RGB as its copper product."""
+    entities = _step_entities(data)
+    copper_id = _step_product_colour(entities, "_copper")
+    pad_id = _step_product_colour(entities, "_pad")
+    copper = _STEP_COLOUR.match(entities[copper_id])
+    pad = _STEP_COLOUR.match(entities[pad_id])
+    if copper is None or pad is None:
+        raise ValueError("Malformed STEP copper or pad colour")
+    if copper.groups()[1:] == pad.groups()[1:]:
+        return data
+    replacement = f"COLOUR_RGB({pad.group(1)},{copper.group(2)},{copper.group(3)},{copper.group(4)})"
+    match = next(match for match in _STEP_ENTITY.finditer(data) if match.group(1) == pad_id)
+    return data[:match.start(2)] + replacement + data[match.end(2):]
+
+
+def recolor_step_file(source: Path, target: Path) -> None:
+    with source.open(encoding="utf-8", newline="") as stream:
+        data = stream.read()
+    changed = recolor_step_pads(data)
+    with target.open("w", encoding="utf-8", newline="") as stream:
+        stream.write(changed)
+    with target.open(encoding="utf-8", newline="") as stream:
+        checked = stream.read()
+    if recolor_step_pads(checked) != checked:
+        raise ValueError("Pad STEP colour did not persist")
+
+
 def recolor_3d_pdf(source: Path, target: Path) -> None:
     """Recolor the pad material in KiCad's single-page 3D PDF output."""
     from pypdf import PdfReader, PdfWriter
@@ -204,6 +303,47 @@ def jobset_work_root(project_root: Path) -> Path:
     if root == project_root or root in project_root.parents or project_root in root.parents:
         raise RuntimeError("Formatter output must be KiCad's temporary destination, outside source")
     return root
+
+
+def clean_release_destination(project_root: Path, prepare_kind: str) -> Path:
+    """Remove only the project output directory selected by this preparation job."""
+    project_root = project_root.resolve(strict=True)
+    jobset = json.loads((project_root / "Outputs.kicad_jobset").read_text(encoding="utf-8"))
+    marker = f"--kind {prepare_kind}"
+    prepare_jobs = [job["id"] for job in jobset["jobs"]
+                    if marker in job.get("settings", {}).get("command", "")]
+    if len(prepare_jobs) != 1:
+        raise ValueError(f"Expected one {prepare_kind} job")
+    destinations = [output for output in jobset["outputs"]
+                    if prepare_jobs[0] in output.get("only", [])]
+    if len(destinations) != 1:
+        raise ValueError(f"Expected {prepare_kind} in exactly one Jobset destination")
+    output_path = Path(destinations[0].get("settings", {}).get("output_path", ""))
+    if (not output_path.parts or output_path.is_absolute()
+            or any(part in ("", ".", "..") for part in output_path.parts)):
+        raise ValueError(f"Jobset destination must be a relative project path: {output_path}")
+
+    destination = project_root.joinpath(output_path)
+    current = project_root
+    for part in output_path.parts:
+        current = current / part
+        if current.is_symlink():
+            raise ValueError(f"Refusing symlinked release destination path: {current}")
+    resolved = destination.resolve()
+    if resolved == project_root or project_root not in resolved.parents:
+        raise ValueError(f"Jobset destination escapes the project: {resolved}")
+
+    if destination.exists():
+        if not destination.is_dir():
+            raise ValueError(f"Jobset destination is not a directory: {destination}")
+        for parent, directories, files in os.walk(destination, followlinks=False):
+            for name in [*directories, *files]:
+                item = Path(parent, name)
+                if item.is_symlink():
+                    raise ValueError(f"Refusing release destination containing symlink: {item}")
+        shutil.rmtree(destination)
+        print(f"Removed previous release destination {output_path.as_posix()}")
+    return destination
 
 
 def assembly_page_count(jobset_path: Path) -> int:
@@ -258,6 +398,7 @@ def write_temporary_worksheet(target: Path, content: bytes) -> None:
 
 def prepare_fabrication_worksheet(project_root: Path) -> None:
     root = jobset_work_root(project_root)
+    clean_release_destination(project_root, "prepare-fabrication")
     source = library_root() / "drawing-sheets" / "alex-generic-pcb.kicad_wks"
     if not source.is_file():
         raise FileNotFoundError(f"Canonical PCB worksheet missing: {source}. "
@@ -274,6 +415,7 @@ def prepare_fabrication_worksheet(project_root: Path) -> None:
 
 def prepare_assembly_worksheets(project_root: Path) -> None:
     root = jobset_work_root(project_root)
+    clean_release_destination(project_root, "prepare-assembly")
     jobset = project_root / "Outputs.kicad_jobset"
     page_count = assembly_page_count(jobset)
     variant = assembly_variant_name(jobset).encode()
@@ -351,6 +493,8 @@ def finalize(kind: str, project_root: Path, variant_name: str = "") -> list[Path
             target = staging / (prefix + file_type + suffix + extension)
             if name == "assembly-3d.pdf":
                 recolor_3d_pdf(work / name, target)
+            elif name == "envelope.step":
+                recolor_step_file(work / name, target)
             else:
                 shutil.copyfile(work / name, target)
         if kind == "assembly":

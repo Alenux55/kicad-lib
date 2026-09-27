@@ -125,10 +125,22 @@ revisions remain text; values beginning with `=` remain literal text rather
 than formulas. Missing exports, unexpected CSV headers, or invalid input fail
 finalization.
 
-The 3D-PDF step corrects the named U3D pad material to use KiCad's copper color,
-then reopens and verifies the staged PDF. Unexpected pages, annotations,
-streams, or material layouts fail the assembly release rather than silently
-publishing a questionable document.
+The 3D-PDF step corrects the named U3D pad material to use KiCad's copper
+diffuse colour, then reopens and verifies the staged PDF. Unexpected pages,
+annotations, streams, or material layouts fail the assembly release rather
+than silently publishing a questionable document.
+
+The STEP step follows KiCad's named `_copper` and `_pad` product presentation
+styles and copies the copper RGB onto the pad product in the staged release
+file. Other STEP products and colours are left unchanged. Missing, duplicate,
+or structurally unexpected product styles fail the fabrication release rather
+than applying a broad colour replacement.
+
+Each worksheet-preparation job removes only its own existing project release
+destination, as declared by that job's `output_path` in `Outputs.kicad_jobset`.
+For example, rerunning fabrication clears `Releases/Fabrication` without touching
+`Releases/Assembly`. Absolute, escaping, non-directory and symlinked destinations,
+including destinations containing symlinks, are rejected before deletion.
 
 The helper currently processes one base assembly set per destination. Supporting
 named variants requires explicit native job selectors, separate intermediate

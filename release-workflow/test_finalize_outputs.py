@@ -66,6 +66,48 @@ class FormattingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "m_Pads_0"):
             formatter.recolor_u3d_pads(data)
 
+    @staticmethod
+    def _step_fixture(include_pad=True):
+        entities = [
+            "#1 = PRODUCT('board_copper','board_copper','',(#90));",
+            "#2 = PRODUCT_DEFINITION_FORMATION('','',#1);",
+            "#3 = PRODUCT_DEFINITION('design','',#2,#91);",
+            "#4 = PRODUCT_DEFINITION_SHAPE('','',#3);",
+            "#5 = SHAPE_DEFINITION_REPRESENTATION(#4,#6);",
+            "#6 = SHAPE_REPRESENTATION('',(#92),#7);",
+            "#8 = MECHANICAL_DESIGN_GEOMETRIC_PRESENTATION_REPRESENTATION('',(#9),#7);",
+            "#9 = STYLED_ITEM('color',(#10),#92);",
+            "#10 = FILL_AREA_STYLE_COLOUR('',#11);",
+            "#11 = COLOUR_RGB('',0.85,0.80,0.0);",
+        ]
+        if include_pad:
+            entities.extend([
+                "#20 = PRODUCT('board_pad','board_pad','',(#93));",
+                "#21 = PRODUCT_DEFINITION_FORMATION('','',#20);",
+                "#22 = PRODUCT_DEFINITION('design','',#21,#94);",
+                "#23 = PRODUCT_DEFINITION_SHAPE('','',#22);",
+                "#24 = SHAPE_DEFINITION_REPRESENTATION(#23,#25);",
+                "#25 = SHAPE_REPRESENTATION('',(#95),#26);",
+                "#27 = MECHANICAL_DESIGN_GEOMETRIC_PRESENTATION_REPRESENTATION('',(#28),#26);",
+                "#28 = STYLED_ITEM('color',(#29),#95);",
+                "#29 = FILL_AREA_STYLE_COLOUR('',#30);",
+                "#30 = COLOUR_RGB('',0.73,0.73,0.73);",
+            ])
+        entities.append("#40 = COLOUR_RGB('unrelated',1.0,1.0,1.0);")
+        return "ISO-10303-21;\nDATA;\n" + "\n".join(entities) + "\nENDSEC;\nEND-ISO-10303-21;\n"
+
+    def test_recolors_only_named_step_pad_product(self):
+        original = self._step_fixture()
+        changed = formatter.recolor_step_pads(original)
+        self.assertNotEqual(changed, original)
+        self.assertIn("#30 = COLOUR_RGB('',0.85,0.80,0.0);", changed)
+        self.assertIn("#40 = COLOUR_RGB('unrelated',1.0,1.0,1.0);", changed)
+        self.assertEqual(formatter.recolor_step_pads(changed), changed)
+
+    def test_step_recolor_rejects_missing_pad_product(self):
+        with self.assertRaisesRegex(ValueError, "'_pad'"):
+            formatter.recolor_step_pads(self._step_fixture(include_pad=False))
+
     def test_requires_jobset_context(self):
         with patch.dict(os.environ, {}, clear=True):
             with self.assertRaisesRegex(RuntimeError, "only through"):
@@ -180,7 +222,8 @@ class FormattingTests(unittest.TestCase):
             work.mkdir()
             with (patch.dict(os.environ, KICAD_LIB_ROOT=str(library),
                              JOBSET_OUTPUT_WORK_PATH=str(work)),
-                  patch.object(formatter, "assembly_page_count", return_value=2)):
+                  patch.object(formatter, "assembly_page_count", return_value=2),
+                  patch.object(formatter, "clean_release_destination")):
                 with patch.object(formatter, "assembly_variant_name", return_value="No Variant"):
                     formatter.prepare_assembly_worksheets(project)
                 self.assertEqual((work / "_work/schematic.kicad_wks").read_bytes(),
@@ -213,7 +256,8 @@ class FormattingTests(unittest.TestCase):
             output.mkdir()
             with (patch.dict(os.environ, KICAD_LIB_ROOT=str(root / "library"),
                              JOBSET_OUTPUT_WORK_PATH=str(output)),
-                  patch.object(formatter, "assembly_page_count", return_value=1)):
+                  patch.object(formatter, "assembly_page_count", return_value=1),
+                  patch.object(formatter, "clean_release_destination")):
                 with patch.object(formatter, "assembly_variant_name", return_value="No Variant"):
                     formatter.prepare_assembly_worksheets(project)
             self.assertEqual((output / "_work/assembly-top.kicad_wks").read_bytes(),
@@ -234,8 +278,9 @@ class FormattingTests(unittest.TestCase):
             project.mkdir()
             output = root / "output"
             output.mkdir()
-            with patch.dict(os.environ, KICAD_LIB_ROOT=str(root / "library"),
-                            JOBSET_OUTPUT_WORK_PATH=str(output)):
+            with (patch.dict(os.environ, KICAD_LIB_ROOT=str(root / "library"),
+                             JOBSET_OUTPUT_WORK_PATH=str(output)),
+                  patch.object(formatter, "clean_release_destination")):
                 formatter.prepare_fabrication_worksheet(project)
             expected = original.replace(b"${##}", b"1").replace(b"${#}", b"1")
             self.assertEqual((output / "_work/fabrication.kicad_wks").read_bytes(), expected)
@@ -251,9 +296,44 @@ class FormattingTests(unittest.TestCase):
             with (patch.dict(os.environ, KICAD_LIB_ROOT=directory,
                              JOBSET_OUTPUT_WORK_PATH=str(output)),
                   patch.object(formatter, "assembly_page_count", return_value=1),
-                  patch.object(formatter, "assembly_variant_name", return_value="No Variant")):
+                  patch.object(formatter, "assembly_variant_name", return_value="No Variant"),
+                  patch.object(formatter, "clean_release_destination")):
                 with self.assertRaisesRegex(FileNotFoundError, "KICAD_LIB_ROOT"):
                     formatter.prepare_assembly_worksheets(project)
+
+    def test_cleanup_removes_only_selected_release_destination(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            selected = project / "Releases/Fabrication"
+            retained = project / "Releases/Assembly"
+            selected.mkdir(parents=True)
+            retained.mkdir()
+            (selected / "old.pdf").write_bytes(b"old")
+            (retained / "keep.pdf").write_bytes(b"keep")
+            jobset = {
+                "jobs": [{"id": "prepare", "settings": {
+                    "command": "tool --kind prepare-fabrication"}}],
+                "outputs": [{"only": ["prepare"], "settings": {
+                    "output_path": "Releases/Fabrication"}}],
+            }
+            (project / "Outputs.kicad_jobset").write_text(json.dumps(jobset))
+            self.assertEqual(formatter.clean_release_destination(
+                project, "prepare-fabrication"), selected)
+            self.assertFalse(selected.exists())
+            self.assertTrue((retained / "keep.pdf").is_file())
+
+    def test_cleanup_rejects_escaping_destination(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            jobset = {
+                "jobs": [{"id": "prepare", "settings": {
+                    "command": "tool --kind prepare-assembly"}}],
+                "outputs": [{"only": ["prepare"], "settings": {
+                    "output_path": "../outside"}}],
+            }
+            (project / "Outputs.kicad_jobset").write_text(json.dumps(jobset))
+            with self.assertRaisesRegex(ValueError, "relative project path"):
+                formatter.clean_release_destination(project, "prepare-assembly")
 
     def test_rejects_unexpected_bom_schema(self):
         with tempfile.TemporaryDirectory() as directory:
